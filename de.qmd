@@ -1,0 +1,719 @@
+---
+title: "`r params$title`"
+format:
+  html:
+    # To use instead of self-contained that has been deprecated
+    # Using custom page layout (via 'style.css')
+    # Open link in a new window by default
+    # Display footnotes in pop-up window when hovering on it
+    toc: false
+    css: ["style.css"]
+    mainfont: Theinhardt
+    fontsize: "16px"
+    embed-resources: true
+    page-layout: custom
+    link-external-newwindow: true
+    footnotes-hover: true
+params:
+  title: ""
+  publication_date: ""
+  lang: "de"
+  doi: ""
+  github_url: ""
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r general-setup, include=FALSE}
+## This file contains the ENGLISH version of the data story
+
+# Set general chunk options
+knitr::opts_chunk$set(
+  echo = FALSE, fig.showtext = TRUE, fig.retina = 3,
+  fig.align = "center", warning = FALSE, message = FALSE
+)
+
+# Install snf.datastory package if not available, otherwise load it
+if (!require("snf.datastory")) {
+  if (!require("devtools")) {
+    install.packages("devtools")
+    library(devtools)
+  }
+  install_github("snsf-data/snf.datastory")
+  library(snf.datastory)
+}
+
+# Load packages
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(conflicted)
+library(jsonlite)
+library(here)
+library(glue)
+library(ggiraph)
+library(showtext)
+library(systemfonts)
+library(treemapify)
+library(patchwork)
+
+# Conflict preferences
+conflict_prefer("filter", "dplyr")
+conflict_prefer("get_datastory_theme", "snf.datastory")
+conflict_prefer("get_datastory_scheme", "snf.datastory")
+
+# If the Theinhardt font is available, the following lines make possible the use
+# of the font in texts and figures. If not, Arial is used instead.
+is_theinhardt_available <- file.exists(here("fonts", "TheinhardtReg.otf"))
+
+if (is_theinhardt_available) {
+  
+  sysfonts::font_add(
+    family = "Theinhardt",
+    regular = here("fonts", "TheinhardtReg.otf"),
+    bold = here("fonts", "TheinhardtBold.otf"),
+    bolditalic = here("fonts", "TheinhardtBoldIt.otf"),
+    italic = here("fonts", "TheinhardtRegIt.otf"),
+  )
+  
+  # Need to register the font to allow its use by ggiraph when creating SVG
+  # files.
+  if (!font_family_exists("Theinhardt")) {
+    
+    # Register existing/downloaded fonts
+    register_font(
+      name = "Theinhardt",
+      plain = list("fonts/TheinhardtReg.otf", 0),
+      bold = list("fonts/TheinhardtBold.otf", 0),
+      italic = list("fonts/TheinhardtRegIt.otf", 0),
+      bolditalic = list("fonts/TheinhardtBoldIt.otf", 0)
+    )
+  }
+  
+  font <- "Theinhardt"
+  
+} else {
+  
+  font <- "Arial"
+  
+}
+
+# Need if we want to use the registered font in ggiraph plots
+showtext_auto()
+
+# Increase showtext package font resolution
+showtext_opts(dpi = 320)
+
+# Set the locale for date formatting based on 'params$lang' (Windows)
+Sys.setlocale(
+  "LC_TIME",
+  switch(
+    params$lang,
+    en = "English",
+    de = "German",
+    fr = "French"
+  )
+)
+
+# Function that returns the desired language version of a string, given three
+# language strings are provided to the function 
+translate <- function(en_string = "NOT TRANSLATED",
+                      de_string = "NOT TRANSLATED",
+                      fr_string = "NOT TRANSLATED",
+                      lang = "en") {
+  
+  string <-
+    case_when(
+      lang == "en" ~ en_string, 
+      lang == "de" ~ de_string, 
+      lang == "fr" ~ fr_string, 
+      TRUE ~ "NO VALID LANGUAGE SPECIFIED"
+    )
+  
+  return(string)
+  
+}
+
+# Create function to print number with local language-specific format
+print_num <- function(x) snf.datastory::print_num(x, lang = params$lang)
+
+# Knitr hook for local formatting of printed numbers
+knitr::knit_hooks$set(
+  inline = function(x) {
+    if (!is.numeric(x)) {
+      x
+    } else {
+      print_num(x)
+    }
+  }
+)
+
+# Produce an interactive figure with ggiraph based on a ggplot object
+make_ggiraph <- function(x,                    # ggplot object
+                         h = 4,                # height of the svg generated
+                         sw = 2,               # width of the stroke
+                         fcolor = "#f6685e",   # color (fill)
+                         color = NA,           # color
+                         scolor = "#f6685e") { # color of the stroke
+  
+  girafe(
+    ggobj = x,
+    height_svg = h,
+    options = list(
+      opts_toolbar(saveaspng = FALSE),
+      opts_hover(
+        css =
+          glue("fill:{fcolor};color:{color};stroke:{scolor};stroke-width:{sw};")
+      ),
+      opts_tooltip(
+        css = get_ggiraph_tooltip_css(family = "Theinhardt"),
+        opacity = 0.8,
+        delay_mouseover = 0,
+        delay_mouseout = 0
+      )
+    )
+  )
+}
+
+```
+
+```{r print-header-infos}
+#| results: asis
+
+# Add publication date to header
+cat(format(as_datetime(params$publication_date), "%d.%m.%Y"))
+```
+
+```{r story-specific-setup}
+#| include: false
+
+data_startups <- read_delim(here("data/data_startups.csv"), delim = ";") 
+data_funding <- read_delim(here("data/data_funding.csv"), delim = ";") 
+
+```
+
+
+<!-- Short lead (2-3 sentences) in bold -->
+
+**Eine Studie belegt: Mit ihrer Forschungsförderung begünstigen der SNF und Innosuisse die Gründung von Start-ups. Viele Geschäftsideen entstehen an den Hochschulen und anderen Forschungsinstitutionen. Davon profitiert die Gesellschaft.**
+
+Start-up-Unternehmen nutzen grundlegende Erkenntnisse aus der Forschung und entwickeln neue technische Anwendungen. Damit sind sie ein wichtiger Treiber für Innovation. Inwiefern trägt die Forschungsförderung zur Gründung solcher Start-ups in der Schweiz bei? Gemeinsam mit Innosuisse gab der SNF eine entsprechende Studie in Auftrag. 
+
+::: info-box
+
+### 470 Start-up-Unternehmen untersucht
+
+SNF und Innosuisse wollten wissen, welchen Beitrag ihre Förderung an die Entstehung von Start-ups in der Schweiz leistet. Deshalb beauftragten sie das Fraunhofer Institut für System- und Innovationsforschung (ISI) mit [einer entsprechenden Studie](https://www.snf.ch/media/de/cqHkBkWVvu3JbTIp/Kurzfassung_Start-up_DE.pdf).
+
+Dabei wurden 2124 Schweizer Start-ups für eine Teilnahme an einer Online-Befragung angeschrieben. Infrage kamen Unternehmen, die seit 2011 gegründet worden waren. 470 Start-ups nahmen an der Befragung teil und gaben Auskunft über ihre Geschäftsidee, die Zusammensetzung ihres Gründungsteams und ihre Entwicklungsziele. Die Studie erfasste, ob die Gründungsidee in einer Wissenschaftseinrichtung (z. B. Hochschule) entwickelt worden war und welche Rolle die öffentliche Förderung für die Gründung spielte.
+
+Vertiefte Fallstudien, ein Ländervergleich, Literaturrecherchen und Interviews mit Expertinnen und Experten ergänzten die Befragungen.
+
+
+:::
+
+470 Start-up-Unternehmen nahmen an der Befragung teil. Davon entsprangen 197 oder 42% einer Wissenschaftseinrichtung; 273 oder 58% wurden ausserhalb von Wissenschaftseinrichtungen gegründet.
+
+Die Gründungen aus Wissenschaftseinrichtungen haben den Ursprung in den meisten Fällen an einer Universität (79%). Es folgen Fachhochschulen (19%) und sonstige Forschungsinstitutionen (17%). Meist entstand die Gründungsidee bei diesen Start-ups während einer wissenschaftlichen Tätigkeit (45%) oder in der Phase einer wissenschaftlichen Qualifikation (36%), vor allem während der Promotion (34%).
+
+ 
+### Rasche Umsetzung der Forschungserkenntnisse
+
+Für die Gründung von Start-ups ist insbesondere die anwendungsorientierte und industrienahe Forschung von Bedeutung. Aber auch Grundlagenforschung trägt direkt zur Entstehung von Start-ups bei. Die Gründungen aus Wissenschaftseinrichtungen zeichnen sich durch eine rasche Umsetzung von Forschungswissen aus: In über 80% der Fälle vergehen von der wissenschaftlichen Erkenntnis bis zur Gründung weniger als 2 Jahre.
+
+::: plot-box
+::: plot-title
+Eigenschaften der Gründungen aus Wissenschaftseinrichtungen
+:::
+
+```{r plot-1}
+#| out-width: "100%"
+#| fig-height: 3
+
+plt1 <-
+  bind_rows(
+    data_startups %>% 
+      filter(variable == "Gründungskontext") |>
+      arrange(desc(value)),
+    data_startups |>
+      filter(variable == "Zeitpunkt") |>
+      arrange(desc(value))
+  ) |>
+  # rowwise() |>
+  mutate(
+    category =
+      case_when(
+        category == "Wissenschaftliche Tätigkeit" ~
+          translate(
+            "Scientific work",
+            "Wissenschaftliche Tätigkeit",
+            "Activité scientifique",
+            params$lang
+          ),
+        category == "Wissenschaftliche Qualifikation" ~
+          translate(
+            "Academic degree",
+            "Wissenschaftliche Qualifikation",
+            "Qualification scientifique",
+            params$lang
+          ),
+        category == "Studium" ~
+          translate("Studies", "Studium", "Études", params$lang),
+        category == "Sonstiges" ~
+          translate("Other", "Sonstiges", "Autres", params$lang),
+        category == "Während der Forschungsarbeit" ~
+          translate(
+            "During research work",
+            "Während der Forschungsarbeit",
+            "Pendant les travaux de recherche",
+            params$lang
+          ),
+        category == "Direkt im Anschluss" ~
+          translate(
+            "Immediately after",
+            "Direkt im Anschluss",
+            "Juste après",
+            params$lang
+          ),
+        category == "Bis 2 Jahre danach" ~
+          translate(
+            "Up to 2 years after",
+            "Bis 2 Jahre danach",
+            "Dans les deux ans après",
+            params$lang
+          ),
+        category == "2 bis 5 Jahre danach" ~
+          translate(
+            "2 to 5 years after",
+            "2 bis 5 Jahre danach",
+            "De 2 à 5 ans après",
+            params$lang
+          ),
+        category == "5 bis 10 Jahre danach" ~
+          translate(
+            "5 to 10 years after",
+            "5 bis 10 Jahre danach",
+            "De 5 à 10 ans après",
+            params$lang
+          ),
+        category == "Über 10 Jahre danach" ~
+          translate(
+            "More than 10 years after",
+            "Über 10 Jahre danach",
+            "Plus de 10 ans après",
+            params$lang
+          )
+      ),
+    variable =
+      case_when(
+        variable == "Gründungskontext" ~
+          translate(
+            "Foundation context",
+            "Gründungskontext",
+            "Contexte de création de start-up",
+            params$lang)
+        ,
+        variable == "Zeitpunkt" ~
+          translate("Time", "Zeitpunkt", "Moment de la création", params$lang)
+      )
+  ) |>
+  ggplot(
+    aes(
+      x = fct_rev(fct_inorder(str_wrap(category, 20))),
+      y = value
+    )
+  ) +
+  geom_col(fill = get_datastory_scheme()[1]) +
+  geom_text(
+    # get the percentage plus the number of cases printed as a label
+    aes(
+      label =  paste0(value*100, "%"),
+      # print the label outside of the bar 
+      y = value + (max(value) / 25)
+    ), 
+    color = "#4C4C4C", 
+    size = 3, 
+    family = "Theinhardt", 
+    hjust = 0
+  ) +
+  coord_flip() +
+  scale_y_continuous(
+    limits = c(0, 0.6),
+    labels = percent_format(accuracy = 1), 
+    breaks = seq(0, .6, 0.2)
+  ) +
+  facet_wrap(~variable, scales = "free_y") +
+  get_datastory_theme(title_axis = "", family =  "Theinhardt") +
+  theme(
+    axis.text.x = element_text(size = 9),
+    axis.text.y = element_text(size = 9)
+  )
+
+plt1
+
+```
+
+::: caption
+Daten: Beiträge der Förderungen von Innosuisse und SNF zur Entstehung und Entwicklung von wissenschaftsbasierten Start-ups. (Fraunhofer ISI, 2023). Antworten von 197 Start-ups, mehrere Antworten möglich.
+:::
+
+:::plot-title
+Forschungsumfeld
+:::
+
+```{r plot-2}
+#| out-width: "100%"
+#| fig-height: 3
+
+plt2 <-
+  data_startups |>
+  filter(str_starts(variable, "Forschungsumfeld")) |>
+  separate(variable, c("variable", "response"), sep = " - ") |>
+  mutate(
+    category =
+      factor(
+        case_when(
+          category == "Grundlagenforschung" ~
+            translate(
+              "Basic research",
+              "Grundlagenforschung",
+              "Recherche fondamentale",
+              params$lang
+            ),
+          category == "Industrienahe F&E" ~
+            translate(
+              "Industry-related R&D",
+              "Industrienahe F&E",
+              "R&D proche de l'industrie",
+              params$lang
+            ),
+          category == "Anwendungsorientierte F&E" ~
+            translate(
+              "Use-inspired R&D",
+              "Anwendungsorientierte F&E",
+              "R&D orientés vers l'application",
+              params$lang
+            ),
+        ),
+        levels =
+          c(
+            translate(
+              "Basic research",
+              "Grundlagenforschung",
+              "Recherche fondamentale",
+              params$lang
+            ),
+            translate(
+              "Industry-related R&D",
+              "Industrienahe F&E",
+              "R&D proche de l'industrie",
+              params$lang
+            )
+            ,
+            translate(
+              "Use-inspired R&D",
+              "Anwendungsorientierte F&E",
+              "R&D orientés vers l'application",
+              params$lang
+            )
+          )
+      ),
+    response =
+      factor(
+        case_when(
+          response == "Teilweise" ~
+            translate("Partially", "Teilweise", "En partie", params$lang),
+          response == "Trifft voll zu" ~
+            translate("Fully", "Trifft voll zu", "Totalement", params$lang),
+        ),
+        levels =
+          c(
+            translate("Partially", "Teilweise", "En partie", params$lang),
+            translate("Fully", "Trifft voll zu", "Totalement", params$lang)
+          )
+      )
+  ) |>
+  ggplot(aes(x = category,
+             y = value,
+             fill = response)) +
+  geom_col(color = "white", width = 0.75) +
+  geom_text(
+    # get the percentage plus the number of cases printed as a label
+    aes(label =  paste0(value*100, "%")),
+    # print the label outside of the bar 
+    position = position_stack(vjust = 0.5), 
+    color = "white", 
+    size = 3, 
+    family = "Theinhardt", 
+    hjust = 0.5
+  ) +
+  coord_flip() +
+  scale_fill_manual(values = get_datastory_scheme())+
+  scale_y_continuous(
+    limits = c(0, 1),
+    labels = percent_format(accuracy = 1), 
+    breaks = seq(0, 1, 0.2)
+  ) + 
+  get_datastory_theme(
+    title_axis = "", legend_position = "top", family =  "Theinhardt"
+  ) +
+  theme(
+    legend.justification = "center",
+    axis.text.x = element_text(size = 9),
+    axis.text.y = element_text(size = 9)
+  )
+
+plt2
+
+```
+
+::: caption
+Daten: Beiträge der Förderungen von Innosuisse und SNF zur Entstehung und Entwicklung von wissenschaftsbasierten Start-ups. (Fraunhofer ISI, 2023). Antworten von 129 Start-ups, mehrere Antworten möglich.
+:::
+:::
+
+
+### Mehrere wichtige Quellen der Förderung
+
+129 der an der Umfrage teilnehmenden Start-up-Unternehmen haben ihren Ursprung in einer wissenschaftlichen Tätigkeit oder Qualifikation. Bei ihnen wurde untersucht, ob die Gründung im Zusammenhang mit geförderten Forschungsarbeiten stand. 103 Start-ups (80%) gaben an, Forschungsförderung erhalten zu haben. Als wichtige Quellen der Förderung nannten sie Innosuisse, hochschuleigene Förderbeiträge, den SNF, sonstige Förderer, EU-Programme und das BRIDGE-Programm von SNF und Innosuisse.
+
+::: plot-box
+::: plot-title
+Woher die Fördergelder stammen
+:::
+
+
+```{r plot-3}
+#| out-width: "100%"
+#| fig-height: 4
+
+plt3 <-
+  data_startups |>
+  filter(variable == "Förderung") |>
+  arrange(desc(value)) |>
+  mutate(
+    category =
+      case_when(
+        category == "Innosuisse" ~
+          translate("Innosuisse", "Innosuisse", "Innosuisse", params$lang),
+        category == "Hochschuleigener Förderbeitrag" ~
+          translate(
+            "Grant from own institution",
+            "Hochschuleigener Förderbeitrag",
+            "Contributions des hautes écoles",
+            params$lang
+          ),
+        category == "SNF" ~
+          translate("SNSF", "SNF", "FNS", params$lang),
+        category == "Sonstiger Förderer" ~
+          translate(
+            "Other funders",
+            "Sonstiger Förderer",
+            "Autres bailleurs de fonds",
+            params$lang
+          ),
+        category == "EU-Programm" ~
+          translate("EU programme", "EU-Programm", "Programme UE", params$lang),
+        category == "BRIDGE" ~
+          translate("BRIDGE", "BRIDGE", "BRIDGE", params$lang),
+        category == "Internationale Förderung" ~
+          translate(
+            "International funding",
+            "Internationale Förderung",
+            "Soutien international",
+            params$lang
+          ),
+        category == "Förderer nicht mehr bekannt" ~
+          translate(
+            "Funder no longer known",
+            "Förderer nicht mehr bekannt",
+            "Bailleurs de fonds non-identifiés",
+            params$lang
+          ),
+      )
+  ) |>
+  ggplot(
+    aes(x = fct_rev(fct_inorder(category)),
+        y = value,
+        fill = category %in% c("SNSF", "SNF", "FNS")
+    )
+  ) +
+  geom_col() +
+  geom_text(
+    # get the percentage plus the number of cases printed as a label
+    aes(
+      label =  paste0(value * 100, "%"),
+      # print the label outside of the bar 
+      y = value + (max(value) / 25)
+    ), 
+    color = "#4C4C4C", 
+    size = 3, 
+    family = "Theinhardt", 
+    hjust = 0) +
+  coord_flip() +
+  scale_fill_manual(
+    values = 
+      c(get_datastory_scheme()[1], get_datastory_scheme()[2])
+  ) +
+  scale_y_continuous(
+    limits = c(0, 0.6),
+    labels = percent_format(accuracy = 1), 
+    breaks = seq(0, 0.6, 0.2)
+  ) +
+  get_datastory_theme(
+    title_axis = "",
+    legend_position = "none",
+    family =  "Theinhardt"
+  ) +
+  theme(
+    legend.justification = "center",
+    axis.text.x = element_text(size = 9),
+    axis.text.y = element_text(size = 9)
+  )
+
+plt3
+
+```
+
+::: caption
+Daten: Beiträge der Förderungen von Innosuisse und SNF zur Entstehung und Entwicklung von wissenschaftsbasierten Start-ups. (Fraunhofer ISI, 2023). Antworten von 103 Start-ups, mehrere Antworten möglich.
+:::
+:::
+
+Der SNF unterstützte 34 Start-ups, die ihren Ursprung in geförderten Forschungsarbeiten haben. Die SNF-Fördergelder stammten aus verschiedenen Instrumenten. 23 Start-ups erhielten Fördergelder vom Programm BRIDGE, das der SNF und Innosuisse zusammen anbieten. Weitere 43 Start-ups erhielten Fördergelder von Innosuisse und 31 aus einem EU-Förderprogramm.
+
+
+::: plot-box
+::: plot-title
+Diese SNF-Instrumente trugen zur Gründung von Start-ups bei
+:::
+
+
+```{r plot-4}
+#| out-width: "100%"
+#| fig-height: 4
+
+plt4 <-
+  data_funding |>
+  mutate(
+    col_val = (value - min(value)) / (max(value) - min(value)),
+    fill = 
+      seq_gradient_pal(
+        colorspace::lighten(color, amount = 0.7),
+        color
+      )(col_val),
+    .by = funder
+  ) |>
+  mutate(
+    instrument =
+      case_when(
+        instrument == "Andere" ~
+          translate("Other", "Andere", "Autres", params$lang),
+        instrument == "Projektförderung" ~
+          translate(
+            "Project funding",
+            "Projektförderung",
+            "Encouragement de projets",
+            params$lang
+          ),
+        instrument == "Karrieren" ~
+          translate("Careers", "Karrieren", "Carrières", params$lang),
+        instrument == "Programme" ~
+          translate("Programmes", "Programme", "Programmes", params$lang),
+        instrument == "Keine Angabe" ~
+          translate(
+            "No information",
+            "Keine Angabe",
+            "Pas d’indication",
+            params$lang
+          ),
+        instrument == "Proof of Concept" ~
+          translate(
+            "Proof of Concept",
+            "Proof of Concept",
+            "Proof of Concept",
+            params$lang
+          ),
+        instrument == "Discovery" ~
+          translate("Discovery", "Discovery", "Discovery", params$lang)
+      )
+  ) |>
+  ggplot() +
+  aes(area = value, subgroup = funder, fill = fill) +
+  geom_treemap(color = "white", size = 0.5*.pt, alpha = NA) + 
+  geom_treemap_subgroup_text(
+    family = "Theinhardt",
+    colour = "white",
+    place = "centre",
+    alpha = 0.7,
+    grow = TRUE
+  ) +
+  geom_treemap_subgroup_border(color = "white") +
+  geom_treemap_text(
+    aes(label = paste(instrument, 
+                      paste("n = ", value),
+                      sep = "\n")),
+    color = "black",
+    family =  "Theinhardt",
+    place = "centre",
+    grow = FALSE
+  ) +
+  scale_fill_identity() +
+  coord_cartesian(clip = "off")
+
+plt4
+
+```
+
+::: caption
+Daten: Beiträge der Förderungen von Innosuisse und SNF zur Entstehung und Entwicklung von wissenschaftsbasierten Start-ups. (Fraunhofer ISI, 2023).
+:::
+:::
+
+Die vom SNF und von Innosuisse unterstützten Start-up-Unternehmen wurden gefragt, welche Impulse von den geförderten Forschungsarbeiten auf die Gründung ausgingen. In den meisten Fällen bildeten deren Ergebnisse die technologische Basis der Gründung oder den Kern der Geschäftsidee. Sie führten auch zu weiteren Fachkompetenzen und Netzwerksbeziehungen, die für die spätere Gründung relevant waren. Oftmals weckten die Projekte bei den Wissenschaftlerinnen und Wissenschaftlern das Interesse, die eigenen Forschungsergebnisse durch die Gründung eines Start-ups zu verwerten. Die Vorbereitung der Gründung konnten sie bereits während des Projekts vorantreiben.
+
+::: info-box
+
+### Wirkstoffe, Geothermie und Blasenentleerung – drei Beispiele
+
+Ein technologiebasiertes Spin-off entwickelte ab 2015 innovative Werkzeuge für die vorklinische Wirkstoffforschung und Bioforschung. Das Unternehmen verfügt inzwischen über eine eigene patentierte Produktlinie. Die Idee für die Gründung entstand im Rahmen langjähriger, vom SNF geförderter Forschungsarbeiten und erfolgte parallel zu den wissenschaftlichen Arbeiten der Gründerpersonen.
+
+Ein weiteres Start-up-Unternehmen wurde im Jahr 2021 ebenfalls als Technologie-Spin-off gegründet. Das Unternehmen produziert einfach installierbare geothermische Panels, die beispielsweise für Wohnungen erneuerbare Wärme aus unterirdischen Infrastrukturen wie etwa Parkhäusern gewinnen. Die letzten Schritte der technologischen Entwicklung konnten dank einer Finanzierung durch das Programm BRIDGE von SNF und Innosuisse abgeschlossen werden. In der Aufbauphase erhielt das Unternehmen zudem Unterstützung durch Innosuisse in Form von Start-up-Trainings und Coachings.
+
+Die Geschäftsidee des dritten Beispiels ist die Entwicklung und der Online-Vertrieb eines nicht-invasiven Medizingeräts zur Unterstützung der Blasenentleerung. Das Unternehmen wurde 2021 gegründet; alle Gründungspersonen haben einen akademischen Hintergrund. Der Nachweis der Machbarkeit wurde mit einer BRIDGE-Finanzierung unterstützt. Im Anschluss daran förderte Innosuisse die Forschungsarbeiten im Rahmen eines Innovationsprojekts.
+
+:::
+
+### Potenziale zugunsten von Gesellschaft und Wirtschaft nutzen
+
+Für den SNF liefert die Studie wichtige Erkenntnisse. So hat sich gezeigt, dass Doktorate und wissenschaftliche Tätigkeit (z. B. Postdoktorate) grosse Bedeutung für die Entstehung von Start-up-Unternehmen haben. Oftmals entwickeln Gründerinnen und Gründer die Geschäftsidee bereits während dieser Forschungsarbeit. Wichtig ist auch die Feststellung, dass Innovationen und Start-ups aus unterschiedlichen SNF-Instrumenten entstehen.
+
+Generell zeigt die Studie: Gesellschaft und Wirtschaft können schnell und umfassend von Forschungsergebnissen profitieren. Nicht umsonst lautet ein Schwerpunkt des SNF im Mehrjahresprogramm für die Zeit von 2025 bis 2028: «Sämtliche Potenziale der Forschung nutzen.»
+
+<strong>Weiterführende Links</strong>
+<p>
+<a href="https://www.snf.ch/media/de/FX8uh6uwOzEDIb6M/Schlussbericht_Start-up_Studie.pdf" class="button-blue">Studie (PDF)</a>
+</p>
+<p>
+<a href="https://www.snf.ch/media/de/cqHkBkWVvu3JbTIp/Kurzfassung_Start-up_DE.pdf" class="button-blue">Kurzfassung der Studie (PDF)</a>
+</p>
+<p>
+<a href="https://www.innosuisse.ch/inno/de/home.html" class="button-blue">Innosuisse</a>
+</p>
+
+Daten, Text und Code dieser Datengeschichte sind [auf Github verfügbar](`r params$github_url`) und [auf Zenodo archiviert](`r params$doi`). <br>DOI: `r str_remove(params$doi, "https://doi.org/")`
+
+```{r prevent-internal-snsf-packages, include=FALSE}
+#| include: false
+
+# Internal SNSF packages must not be used in data stories, as their
+# pre-processing functions are internal and the corporate design differs from
+# the data portal.
+if (any(c("snfverse", "snf.preprocessing", "snf.plot") %in% 
+        loadedNamespaces())) {
+  stop(glue(
+    "You must not use internal SNSF packages in data stories.",
+    " Please resort to snf.datastory."
+  ))
+}
+```

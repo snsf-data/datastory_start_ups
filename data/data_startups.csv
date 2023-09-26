@@ -1,0 +1,28 @@
+﻿variable;category;value
+Ursprung;Universitäre Hochschule;0.79
+Ursprung;Fachhochschule;0.19
+Ursprung;Forschungseinrichtung;0.17
+Gründungskontext;Wissenschaftliche Tätigkeit;0.45
+Gründungskontext;Wissenschaftliche Qualifikation;0.36
+Gründungskontext;Studium;0.27
+Gründungskontext;Sonstiges;0.17
+Forschungsumfeld - Trifft voll zu;Grundlagenforschung;0.19
+Forschungsumfeld - Trifft voll zu;Anwendungsorientierte F&E;0.71
+Forschungsumfeld - Trifft voll zu;Industrienahe F&E;0.37
+Forschungsumfeld - Teilweise;Grundlagenforschung;0.39
+Forschungsumfeld - Teilweise;Anwendungsorientierte F&E;0.22
+Forschungsumfeld - Teilweise;Industrienahe F&E;0.33
+Zeitpunkt;Während der Forschungsarbeit;0.43
+Zeitpunkt;Direkt im Anschluss;0.24
+Zeitpunkt;Bis 2 Jahre danach;0.19
+Zeitpunkt;2 bis 5 Jahre danach;0.12
+Zeitpunkt;5 bis 10 Jahre danach;0.05
+Zeitpunkt;Über 10 Jahre danach;0.04
+Förderung;Innosuisse;0.39
+Förderung;SNF;0.35
+Förderung;BRIDGE;0.23
+Förderung;EU-Programm;0.24
+Förderung;Internationale Förderung;0.13
+Förderung;Hochschuleigener Förderbeitrag;0.38
+Förderung;Sonstiger Förderer;0.28
+Förderung;Förderer nicht mehr bekannt;0.01
